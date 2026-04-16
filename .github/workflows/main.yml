@@ -43,9 +43,9 @@ jobs:
           path: ambuild
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.9
+          python-version: '3.11'
 
       - name: Install Python dependencies and ambuild
         run: |
@@ -57,7 +57,8 @@ jobs:
       - name: Install Python dependencies and ambuild (Windows)
         run: |
           python -m pip install --upgrade pip wheel
-        shell: cmd
+          pip install --no-build-isolation ./ambuild
+        shell: bash
         if: runner.os == 'Windows'
 
       - name: Build (Linux)
@@ -79,16 +80,14 @@ jobs:
 
       - name: Build (Windows)
         working-directory: extension
-        shell: cmd
+        shell: bash
         if: runner.os == 'Windows'
         run: |
           powershell -Command "if (Test-Path boost.zip) { Expand-Archive -Force -Path boost.zip -DestinationPath . }"
           powershell -Command "if (Test-Path openssl.zip) { Expand-Archive -Force -Path openssl.zip -DestinationPath . }"
-          if not exist build mkdir build
-          cd build
-          set PYTHONPATH=${{ github.workspace }}\ambuild;%PYTHONPATH%
+          mkdir -p build && cd build
           python ../configure.py --enable-optimize --targets=${{env.BUILD_ARCH}} --sm-path ../../sourcemod
-          python -m ambuild
+          ambuild
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -108,7 +107,7 @@ jobs:
 
       - name: Package
         run: |
-          echo version=$GITHUB_REF | sed "s/refs\/tags\///" >> $GITHUB_ENV
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
           7z a sm-ripext-${{env.version}}-ubuntu-22.04.zip ./ubuntu-22.04/*
           7z a sm-ripext-${{env.version}}-windows-2022.zip ./windows-2022/*
 
