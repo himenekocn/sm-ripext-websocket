@@ -28,6 +28,13 @@ jobs:
           path: extension
           submodules: recursive
 
+      - name: Checkout SourceMod
+        uses: actions/checkout@v4
+        with:
+          repository: alliedmodders/sourcemod
+          path: sourcemod
+          submodules: recursive
+
       - name: Checkout AMBuild
         uses: actions/checkout@v4
         with:
