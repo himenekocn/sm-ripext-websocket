@@ -20,7 +20,7 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt update
-          sudo apt install -yq --no-install-recommends gcc-multilib g++-multilib
+          sudo apt install -yq --no-install-recommends gcc-multilib g++-multilib libwww-perl
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,6 +43,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip wheel
           pip install --no-build-isolation ./ambuild
+        shell: bash
+        if: runner.os == 'Linux'
+
+      - name: Install Python dependencies and ambuild (Windows)
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install -e ./ambuild
+        shell: cmd
+        if: runner.os == 'Windows'
 
       - name: Build
         working-directory: extension
