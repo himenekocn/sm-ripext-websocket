@@ -59,15 +59,14 @@ jobs:
           python -m pip install --upgrade pip wheel
         shell: cmd
         if: runner.os == 'Windows'
-        env:
-          PIP_NO_BUILD_ISOLATION: 1
 
       - name: Build
         working-directory: extension
         shell: bash
-        env:
-          PYTHONPATH: ${{ github.workspace }}/ambuild:${{ env.PYTHONPATH }}
         run: |
+          # Set PYTHONPATH for ambuild access
+          export PYTHONPATH="${{ github.workspace }}/ambuild:$PYTHONPATH"
+          
           unzip -qq boost.zip
           unzip -qq openssl.zip
           mkdir build && cd build
@@ -78,7 +77,11 @@ jobs:
             touch ca-bundle.crt
           fi
           python ../configure.py --enable-optimize --targets=${{env.BUILD_ARCH}} --sm-path ../../sourcemod
-          python -c "from ambuild2.run import main; main()" 
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            ambuild
+          else
+            python -m ambuild
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
