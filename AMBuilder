@@ -36,6 +36,8 @@ for cxx in builder.targets:
     os.path.join(builder.sourcePath, 'src'),
     os.path.join(builder.sourcePath, 'boost'),
     os.path.join(builder.sourcePath, 'openssl', 'include'),
+    os.path.join(Extension.sm_root, 'public'),
+    os.path.join(Extension.sm_root, 'public', 'extensions'),
   ]
 
   if binary.compiler.target.platform == 'linux':
