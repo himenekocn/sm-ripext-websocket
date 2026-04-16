@@ -34,6 +34,7 @@ jobs:
           repository: alliedmodders/sourcemod
           path: sourcemod
           submodules: recursive
+          ref: 1.10-dev
 
       - name: Checkout AMBuild
         uses: actions/checkout@v4
