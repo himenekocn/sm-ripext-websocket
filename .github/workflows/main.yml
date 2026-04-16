@@ -51,7 +51,7 @@ jobs:
           unzip -qq boost.zip
           unzip -qq openssl.zip
           mkdir build && cd build
-          perl ../curl/lib/mk-ca-bundle.pl
+          perl ../curl/lib/mk-ca-bundle.pl -k
           python ../configure.py --enable-optimize --targets=${{env.BUILD_ARCH}} --sm-path ../sourcemod
           ambuild
 
