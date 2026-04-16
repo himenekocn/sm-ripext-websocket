@@ -57,7 +57,7 @@ jobs:
       - name: Install Python dependencies and ambuild (Windows)
         run: |
           python -m pip install --upgrade pip wheel
-          pip install -e ./ambuild
+          pip install --no-build-isolation ./ambuild
         shell: cmd
         if: runner.os == 'Windows'
 
