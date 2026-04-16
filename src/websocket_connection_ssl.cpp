@@ -226,7 +226,7 @@ void websocket_connection_ssl::cancel()
         this->resolver->cancel();
 
         auto &stream = beast::get_lowest_layer(*this->ws);
-        stream.cancel(ec);
+        stream.cancel();
 
         if (this->ws->is_open())
         {
