@@ -76,7 +76,7 @@ jobs:
             touch ca-bundle.crt
           fi
           python ../configure.py --enable-optimize --targets=${{env.BUILD_ARCH}} --sm-path ../../sourcemod
-          ambuild
+          python -m ambuild
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
