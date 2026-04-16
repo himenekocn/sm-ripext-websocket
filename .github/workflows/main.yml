@@ -60,13 +60,11 @@ jobs:
         shell: cmd
         if: runner.os == 'Windows'
 
-      - name: Build
+      - name: Build (Linux)
         working-directory: extension
         shell: bash
+        if: runner.os == 'Linux'
         run: |
-          # Set PYTHONPATH for ambuild access
-          export PYTHONPATH="${{ github.workspace }}/ambuild:$PYTHONPATH"
-          
           unzip -qq boost.zip
           unzip -qq openssl.zip
           mkdir build && cd build
@@ -77,11 +75,20 @@ jobs:
             touch ca-bundle.crt
           fi
           python ../configure.py --enable-optimize --targets=${{env.BUILD_ARCH}} --sm-path ../../sourcemod
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            ambuild
-          else
-            python -m ambuild
-          fi
+          ambuild
+
+      - name: Build (Windows)
+        working-directory: extension
+        shell: cmd
+        if: runner.os == 'Windows'
+        run: |
+          powershell -Command "if (Test-Path boost.zip) { Expand-Archive -Force -Path boost.zip -DestinationPath . }"
+          powershell -Command "if (Test-Path openssl.zip) { Expand-Archive -Force -Path openssl.zip -DestinationPath . }"
+          if not exist build mkdir build
+          cd build
+          set PYTHONPATH=${{ github.workspace }}\ambuild;%PYTHONPATH%
+          python ../configure.py --enable-optimize --targets=${{env.BUILD_ARCH}} --sm-path ../../sourcemod
+          python -m ambuild
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
