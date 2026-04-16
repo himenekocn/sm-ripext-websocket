@@ -83,8 +83,8 @@ jobs:
         shell: bash
         if: runner.os == 'Windows'
         run: |
-          powershell -Command "if (Test-Path boost.zip) { Expand-Archive -Force -Path boost.zip -DestinationPath . }"
-          powershell -Command "if (Test-Path openssl.zip) { Expand-Archive -Force -Path openssl.zip -DestinationPath . }"
+          unzip -qq boost.zip
+          unzip -qq openssl.zip
           mkdir -p build && cd build
           python ../configure.py --enable-optimize --targets=${{env.BUILD_ARCH}} --sm-path ../../sourcemod
           ambuild
