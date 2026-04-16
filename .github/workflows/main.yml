@@ -41,8 +41,8 @@ jobs:
 
       - name: Install Python dependencies and ambuild
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install ./ambuild
+          python -m pip install --upgrade pip wheel
+          pip install --no-build-isolation ./ambuild
 
       - name: Build
         working-directory: extension
@@ -65,7 +65,7 @@ jobs:
     name: Release
     if: startsWith(github.ref, 'refs/tags/')
     needs: build
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Download artifacts
@@ -74,8 +74,8 @@ jobs:
       - name: Package
         run: |
           echo version=$GITHUB_REF | sed "s/refs\/tags\///" >> $GITHUB_ENV
-          7z a sm-ripext-${{env.version}}-ubuntu-20.04.zip ./ubuntu-20.04/*
-          7z a sm-ripext-${{env.version}}-windows-2019.zip ./windows-2019/*
+          7z a sm-ripext-${{env.version}}-ubuntu-22.04.zip ./ubuntu-22.04/*
+          7z a sm-ripext-${{env.version}}-windows-2022.zip ./windows-2022/*
 
       - name: Upload Release File
         uses: svenstaro/upload-release-action@v2
