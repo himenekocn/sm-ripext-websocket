@@ -73,7 +73,7 @@ jobs:
           else
             touch ca-bundle.crt
           fi
-          python ../configure.py --enable-optimize --targets=${{env.BUILD_ARCH}} --sm-path ../sourcemod
+          python ../configure.py --enable-optimize --targets=${{env.BUILD_ARCH}} --sm-path ../../sourcemod
           ambuild
 
       - name: Upload artifact
