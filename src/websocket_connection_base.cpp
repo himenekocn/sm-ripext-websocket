@@ -43,18 +43,14 @@ void websocket_connection_base::add_headers(websocket::request_type &req)
 
 void websocket_connection_base::destroy()
 {
-    // Set pending_delete first, then cancel operations
-    // The atomic operations ensure proper sequencing
-    this->pending_delete.store(true);
+    this->pending_delete.store(true, std::memory_order_release);
     this->cancel();
-    // maybe_delete will be called by end_async when async_ops reaches 0
-    // or we can call it here as a fallback
     this->maybe_delete();
 }
 
 bool websocket_connection_base::ws_open()
 {
-    return this->ws_connect.load() && !this->destroyed.load();
+    return this->ws_connect.load(std::memory_order_acquire) && !this->deleted.load(std::memory_order_acquire);
 }
 
 void websocket_connection_base::begin_async()
@@ -64,7 +60,6 @@ void websocket_connection_base::begin_async()
 
 void websocket_connection_base::end_async()
 {
-    // Use memory_order_acq_rel to ensure proper synchronization
     if (this->async_ops.fetch_sub(1, std::memory_order_acq_rel) == 1)
     {
         this->maybe_delete();
@@ -83,14 +78,16 @@ void websocket_connection_base::notify_disconnect()
 
 void websocket_connection_base::maybe_delete()
 {
-    // Double-check pattern to avoid race conditions
-    // Both conditions must be true for deletion
-    if (this->pending_delete.load(std::memory_order_acquire) && 
+    // Use compare_exchange to ensure only one thread ever executes delete this
+    // This prevents the double-free race condition between destroy() and end_async()
+    if (this->pending_delete.load(std::memory_order_acquire) &&
         this->async_ops.load(std::memory_order_acquire) == 0)
     {
-        // Mark as destroyed before actual deletion to prevent any new operations
-        this->destroyed.store(true, std::memory_order_release);
-        // Note: This is called from shared_ptr context, so we don't delete directly
-        // The shared_ptr will handle cleanup when all references are gone
+        // Atomically mark as deleted - only one thread will succeed
+        bool expected = false;
+        if (this->deleted.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+        {
+            delete this;
+        }
     }
 }

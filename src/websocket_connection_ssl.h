@@ -16,14 +16,6 @@ class websocket_connection_ssl : public websocket_connection_base
 {
 public:
     websocket_connection_ssl(std::string address, std::string endpoint, uint16_t port);
-    
-    // Factory method to create shared_ptr instances
-    template<typename... Args>
-    static std::shared_ptr<websocket_connection_ssl> create(Args&&... args)
-    {
-        return std::shared_ptr<websocket_connection_ssl>(new websocket_connection_ssl(std::forward<Args>(args)...));
-    }
-    
     void connect() override;
     void write(std::string message) override;
     void close() override;

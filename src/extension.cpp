@@ -392,10 +392,10 @@ void JSONObjectKeysHandler::OnHandleDestroy(HandleType_t type, void *object)
 
 void WebSocketHandler::OnHandleDestroy(HandleType_t type, void *object)
 {
-	// FIX: Safely destroy the WebSocket connection
-	// The connection is managed by shared_ptr, so we just call destroy()
-	// which will set pending_delete and cancel operations.
-	// The actual deletion happens when async_ops reaches 0.
+	// Safely destroy the WebSocket connection.
+	// destroy() sets pending_delete and calls cancel().
+	// The actual deletion happens via maybe_delete() when async_ops reaches 0,
+	// using compare_exchange to ensure only one thread executes delete.
 	auto *conn = reinterpret_cast<websocket_connection_base *>(object);
 	if (conn)
 	{

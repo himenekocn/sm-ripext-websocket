@@ -258,14 +258,6 @@ static cell_t native_WebSocket(IPluginContext *p_context, const cell_t *params)
             {
                 url.port("443");
             }
-            // FIX: Use factory method to create shared_ptr
-            auto conn = websocket_connection_ssl::create(host, path, stoi(url.port()));
-            // We need to release the raw pointer for the handle system
-            // The shared_ptr will be managed by the connection's internal shared_from_this
-            connection = conn.get();
-            // Keep the shared_ptr alive by not letting it go out of scope
-            // Actually, we need a different approach - store the shared_ptr somewhere
-            // For now, use raw new to maintain compatibility with existing code
             connection = new websocket_connection_ssl(host, path, stoi(url.port()));
         }
         else if (url.scheme() == "ws")

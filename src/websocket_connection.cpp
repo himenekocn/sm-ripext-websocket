@@ -15,16 +15,16 @@ void websocket_connection::connect()
 
     try
     {
-        // Check if already destroyed
-        if (this->is_destroyed())
+        // Check if already being destroyed
+        if (this->pending_delete.load(std::memory_order_acquire))
         {
             g_RipExt.LogError("WebSocket connect called on destroyed connection");
             return;
         }
 
-        this->disconnect_notified.store(false);
-        this->ws_connect.store(false);
-        this->close_in_progress.store(false);
+        this->disconnect_notified.store(false, std::memory_order_release);
+        this->ws_connect.store(false, std::memory_order_release);
+        this->close_in_progress.store(false, std::memory_order_release);
 
         char s_port[8];
         std::snprintf(s_port, sizeof(s_port), "%hu", this->port);
@@ -32,14 +32,7 @@ void websocket_connection::connect()
 
         this->begin_async();
         resolve_started = true;
-        
-        // Use shared_from_this() to ensure object stays alive during async operation
-        auto self = shared_from_this();
-        this->resolver->async_resolve(query, 
-            [self](beast::error_code ec, tcp::resolver::results_type results)
-            {
-                std::static_pointer_cast<websocket_connection>(self)->on_resolve(ec, results);
-            });
+        this->resolver->async_resolve(query, beast::bind_front_handler(&websocket_connection::on_resolve, this));
         g_RipExt.LogMessage("Init Connect %s:%d", address.c_str(), this->port);
     }
     catch (const std::exception &ex)
@@ -59,7 +52,7 @@ void websocket_connection::on_resolve(beast::error_code ec, tcp::resolver::resul
                                                                           { this->end_async(); });
 
     // Check if connection is being destroyed
-    if (this->pending_delete.load() || this->is_destroyed())
+    if (this->pending_delete.load(std::memory_order_acquire))
     {
         return;
     }
@@ -68,19 +61,13 @@ void websocket_connection::on_resolve(beast::error_code ec, tcp::resolver::resul
     {
         g_RipExt.LogError("Error resolving %s: %d %s", this->address.c_str(), ec.value(), ec.message().c_str());
         this->notify_disconnect();
-        this->ws_connect.store(false);
+        this->ws_connect.store(false, std::memory_order_release);
         return;
     }
 
     beast::get_lowest_layer(*this->ws).expires_after(std::chrono::seconds(30));
     this->begin_async();
-    
-    auto self = shared_from_this();
-    beast::get_lowest_layer(*this->ws).async_connect(results, 
-        [self](beast::error_code ec, tcp::resolver::results_type::endpoint_type ep)
-        {
-            std::static_pointer_cast<websocket_connection>(self)->on_connect(ec, ep);
-        });
+    beast::get_lowest_layer(*this->ws).async_connect(results, beast::bind_front_handler(&websocket_connection::on_connect, this));
 }
 
 void websocket_connection::on_connect(beast::error_code ec, tcp::resolver::results_type::endpoint_type ep)
@@ -88,7 +75,7 @@ void websocket_connection::on_connect(beast::error_code ec, tcp::resolver::resul
     const auto guard = std::unique_ptr<void, std::function<void(void *)>>(nullptr, [this](void *)
                                                                           { this->end_async(); });
 
-    if (this->pending_delete.load() || this->is_destroyed())
+    if (this->pending_delete.load(std::memory_order_acquire))
     {
         return;
     }
@@ -97,7 +84,7 @@ void websocket_connection::on_connect(beast::error_code ec, tcp::resolver::resul
     {
         g_RipExt.LogError("Error connecting to %s: %d %s", this->address.c_str(), ec.value(), ec.message().c_str());
         this->notify_disconnect();
-        this->ws_connect.store(false);
+        this->ws_connect.store(false, std::memory_order_release);
         return;
     }
     beast::get_lowest_layer(*this->ws).expires_never();
@@ -108,13 +95,7 @@ void websocket_connection::on_connect(beast::error_code ec, tcp::resolver::resul
                                                            { this->add_headers(req); }));
 
     this->begin_async();
-    
-    auto self = shared_from_this();
-    this->ws->async_handshake(this->address, this->endpoint.c_str(), 
-        [self](beast::error_code ec)
-        {
-            std::static_pointer_cast<websocket_connection>(self)->on_handshake(ec);
-        });
+    this->ws->async_handshake(this->address, this->endpoint.c_str(), beast::bind_front_handler(&websocket_connection::on_handshake, this));
 }
 
 void websocket_connection::on_handshake(beast::error_code ec)
@@ -122,7 +103,7 @@ void websocket_connection::on_handshake(beast::error_code ec)
     const auto guard = std::unique_ptr<void, std::function<void(void *)>>(nullptr, [this](void *)
                                                                           { this->end_async(); });
 
-    if (this->pending_delete.load() || this->is_destroyed())
+    if (this->pending_delete.load(std::memory_order_acquire))
     {
         return;
     }
@@ -131,7 +112,7 @@ void websocket_connection::on_handshake(beast::error_code ec)
     {
         g_RipExt.LogError("WebSocket Handshake Error: %d %s", ec.value(), ec.message().c_str());
         this->notify_disconnect();
-        this->ws_connect.store(false);
+        this->ws_connect.store(false, std::memory_order_release);
         return;
     }
 
@@ -142,14 +123,8 @@ void websocket_connection::on_handshake(beast::error_code ec)
     }
 
     this->begin_async();
-    
-    auto self = shared_from_this();
-    this->ws->async_read(this->buffer, 
-        [self](beast::error_code ec, size_t bytes_transferred)
-        {
-            std::static_pointer_cast<websocket_connection>(self)->on_read(ec, bytes_transferred);
-        });
-    this->ws_connect.store(true);
+    this->ws->async_read(this->buffer, beast::bind_front_handler(&websocket_connection::on_read, this));
+    this->ws_connect.store(true, std::memory_order_release);
     g_RipExt.LogMessage("On Handshaked %s:%d", address.c_str(), this->port);
 }
 
@@ -158,7 +133,7 @@ void websocket_connection::on_write(beast::error_code ec, size_t bytes_transferr
     const auto guard = std::unique_ptr<void, std::function<void(void *)>>(nullptr, [this](void *)
                                                                           { this->end_async(); });
 
-    if (this->is_destroyed())
+    if (this->pending_delete.load(std::memory_order_acquire))
     {
         return;
     }
@@ -166,9 +141,9 @@ void websocket_connection::on_write(beast::error_code ec, size_t bytes_transferr
     if (ec)
     {
         g_RipExt.LogError("WebSocket write error: %d %s", ec.value(), ec.message().c_str());
-        // FIX: Notify disconnect on write error
+        // FIX: Notify disconnect on write error to prevent state inconsistency
         this->notify_disconnect();
-        this->ws_connect.store(false);
+        this->ws_connect.store(false, std::memory_order_release);
         return;
     }
 }
@@ -178,19 +153,16 @@ void websocket_connection::on_read(beast::error_code ec, size_t bytes_transferre
     const auto guard = std::unique_ptr<void, std::function<void(void *)>>(nullptr, [this](void *)
                                                                           { this->end_async(); });
 
-    if (this->is_destroyed())
+    if (this->pending_delete.load(std::memory_order_acquire))
     {
         return;
     }
 
     if (ec)
     {
-        if (!this->pending_delete.load())
-        {
-            g_RipExt.LogError("WebSocket read error: %d %s", ec.value(), ec.message().c_str());
-            this->notify_disconnect();
-            this->ws_connect.store(false);
-        }
+        g_RipExt.LogError("WebSocket read error: %d %s", ec.value(), ec.message().c_str());
+        this->notify_disconnect();
+        this->ws_connect.store(false, std::memory_order_release);
         return;
     }
 
@@ -202,7 +174,7 @@ void websocket_connection::on_read(beast::error_code ec, size_t bytes_transferre
         {
             g_RipExt.LogError("WebSocket read: failed to allocate buffer of size %zu", bytes_transferred);
             this->notify_disconnect();
-            this->ws_connect.store(false);
+            this->ws_connect.store(false, std::memory_order_release);
             return;
         }
         memcpy(buffer, reinterpret_cast<const uint8_t *>(this->buffer.data().data()), bytes_transferred);
@@ -212,13 +184,7 @@ void websocket_connection::on_read(beast::error_code ec, size_t bytes_transferre
     this->buffer.consume(bytes_transferred);
 
     this->begin_async();
-    
-    auto self = shared_from_this();
-    this->ws->async_read(this->buffer, 
-        [self](beast::error_code ec, size_t bytes_transferred)
-        {
-            std::static_pointer_cast<websocket_connection>(self)->on_read(ec, bytes_transferred);
-        });
+    this->ws->async_read(this->buffer, beast::bind_front_handler(&websocket_connection::on_read, this));
 }
 
 void websocket_connection::on_close(beast::error_code ec)
@@ -230,8 +196,8 @@ void websocket_connection::on_close(beast::error_code ec)
     {
         g_RipExt.LogError("WebSocket close error: %d %s", ec.value(), ec.message().c_str());
     }
-    this->ws_connect.store(false);
-    this->close_in_progress.store(false);
+    this->ws_connect.store(false, std::memory_order_release);
+    this->close_in_progress.store(false, std::memory_order_release);
 }
 
 void websocket_connection::write(std::string message)
@@ -239,21 +205,21 @@ void websocket_connection::write(std::string message)
     try
     {
         // FIX: Check connection state before writing
-        if (this->is_destroyed() || !this->ws_connect.load() || this->pending_delete.load())
+        if (this->pending_delete.load(std::memory_order_acquire))
         {
-            g_RipExt.LogError("WebSocket write: connection not ready or destroyed");
+            g_RipExt.LogError("WebSocket write: connection is being destroyed");
+            return;
+        }
+        if (!this->ws_connect.load(std::memory_order_acquire))
+        {
+            g_RipExt.LogError("WebSocket write: connection not established");
             return;
         }
 
         auto payload = std::make_shared<std::string>(std::move(message));
         this->begin_async();
-        
-        auto self = shared_from_this();
-        this->ws->async_write(boost::asio::buffer(*payload), 
-            [self, payload](beast::error_code ec, size_t bytes_transferred)
-            {
-                std::static_pointer_cast<websocket_connection>(self)->on_write(ec, bytes_transferred);
-            });
+        this->ws->async_write(boost::asio::buffer(*payload), [this, payload](beast::error_code ec, size_t bytes_transferred)
+                              { this->on_write(ec, bytes_transferred); });
     }
     catch (const std::exception &ex)
     {
@@ -269,7 +235,7 @@ void websocket_connection::close()
 
 bool websocket_connection::socket_open()
 {
-    return this->ws->is_open() && !this->is_destroyed();
+    return this->ws->is_open();
 }
 
 void websocket_connection::cancel()
@@ -280,28 +246,22 @@ void websocket_connection::cancel()
         this->resolver->cancel();
 
         auto &stream = beast::get_lowest_layer(*this->ws);
-        
-        // FIX: Check if close is already in progress to avoid double-close issues
-        if (this->close_in_progress.exchange(true))
+
+        // FIX: Use close_in_progress to prevent double-close race
+        if (this->close_in_progress.exchange(true, std::memory_order_acq_rel))
         {
-            // Close already in progress, just cancel pending operations
+            // Close already in progress, just cancel remaining operations
             stream.cancel();
             return;
         }
-        
+
         // Cancel all pending async operations first
         stream.cancel();
 
         if (this->ws->is_open())
         {
             this->begin_async();
-            
-            auto self = shared_from_this();
-            this->ws->async_close(websocket::close_code::normal, 
-                [self](beast::error_code ec)
-                {
-                    std::static_pointer_cast<websocket_connection>(self)->on_close(ec);
-                });
+            this->ws->async_close(websocket::close_code::normal, beast::bind_front_handler(&websocket_connection::on_close, this));
             return;
         }
 
