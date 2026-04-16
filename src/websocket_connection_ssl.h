@@ -16,10 +16,19 @@ class websocket_connection_ssl : public websocket_connection_base
 {
 public:
     websocket_connection_ssl(std::string address, std::string endpoint, uint16_t port);
-    void connect();
-    void write(std::string message);
-    void close();
-    void cancel();
+    
+    // Factory method to create shared_ptr instances
+    template<typename... Args>
+    static std::shared_ptr<websocket_connection_ssl> create(Args&&... args)
+    {
+        return std::shared_ptr<websocket_connection_ssl>(new websocket_connection_ssl(std::forward<Args>(args)...));
+    }
+    
+    void connect() override;
+    void write(std::string message) override;
+    void close() override;
+    bool socket_open() override;
+    void cancel() override;
 
 private:
     void on_resolve(beast::error_code ec, tcp::resolver::results_type results);
@@ -29,7 +38,6 @@ private:
     void on_write(beast::error_code ec, size_t bytes_transferred);
     void on_read(beast::error_code ec, size_t bytes_transferred);
     void on_close(beast::error_code ec);
-    bool socket_open();
 
     std::unique_ptr<websocket::stream<beast::ssl_stream<beast::tcp_stream>>> ws;
     std::unique_ptr<boost::asio::io_context::work> work;

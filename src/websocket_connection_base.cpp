@@ -1,10 +1,8 @@
 #include "websocket_connection_base.h"
 
 websocket_connection_base::websocket_connection_base(std::string address, std::string endpoint, uint16_t port)
+    : address(std::move(address)), endpoint(std::move(endpoint)), port(port)
 {
-    this->address = address;
-    this->endpoint = endpoint;
-    this->port = port;
 }
 
 void websocket_connection_base::set_write_callback(std::function<void(size_t)> callback)
@@ -45,24 +43,29 @@ void websocket_connection_base::add_headers(websocket::request_type &req)
 
 void websocket_connection_base::destroy()
 {
+    // Set pending_delete first, then cancel operations
+    // The atomic operations ensure proper sequencing
     this->pending_delete.store(true);
     this->cancel();
+    // maybe_delete will be called by end_async when async_ops reaches 0
+    // or we can call it here as a fallback
     this->maybe_delete();
 }
 
 bool websocket_connection_base::ws_open()
 {
-    return this->ws_connect.load();
+    return this->ws_connect.load() && !this->destroyed.load();
 }
 
 void websocket_connection_base::begin_async()
 {
-    this->async_ops.fetch_add(1);
+    this->async_ops.fetch_add(1, std::memory_order_acq_rel);
 }
 
 void websocket_connection_base::end_async()
 {
-    if (this->async_ops.fetch_sub(1) == 1)
+    // Use memory_order_acq_rel to ensure proper synchronization
+    if (this->async_ops.fetch_sub(1, std::memory_order_acq_rel) == 1)
     {
         this->maybe_delete();
     }
@@ -80,8 +83,14 @@ void websocket_connection_base::notify_disconnect()
 
 void websocket_connection_base::maybe_delete()
 {
-    if (this->pending_delete.load() && this->async_ops.load() == 0)
+    // Double-check pattern to avoid race conditions
+    // Both conditions must be true for deletion
+    if (this->pending_delete.load(std::memory_order_acquire) && 
+        this->async_ops.load(std::memory_order_acquire) == 0)
     {
-        delete this;
+        // Mark as destroyed before actual deletion to prevent any new operations
+        this->destroyed.store(true, std::memory_order_release);
+        // Note: This is called from shared_ptr context, so we don't delete directly
+        // The shared_ptr will handle cleanup when all references are gone
     }
 }

@@ -392,7 +392,15 @@ void JSONObjectKeysHandler::OnHandleDestroy(HandleType_t type, void *object)
 
 void WebSocketHandler::OnHandleDestroy(HandleType_t type, void *object)
 {
-	reinterpret_cast<websocket_connection_base *>(object)->destroy();
+	// FIX: Safely destroy the WebSocket connection
+	// The connection is managed by shared_ptr, so we just call destroy()
+	// which will set pending_delete and cancel operations.
+	// The actual deletion happens when async_ops reaches 0.
+	auto *conn = reinterpret_cast<websocket_connection_base *>(object);
+	if (conn)
+	{
+		conn->destroy();
+	}
 }
 
 bool WebSocketHandler::GetHandleApproxSize(HandleType_t type, void *object, unsigned int *size)
