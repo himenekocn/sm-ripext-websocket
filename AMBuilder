@@ -1,0 +1,102 @@
+# vim: set sts=2 ts=8 sw=2 tw=99 et ft=python:
+import os
+
+libcurl = builder.Build('curl/lib/AMBuilder')
+libjansson = builder.Build('jansson/src/AMBuilder')
+libnghttp2 = builder.Build('nghttp2/lib/AMBuilder')
+libuv = builder.Build('libuv/src/AMBuilder')
+libz = builder.Build('zlib/AMBuilder')
+
+for cxx in builder.targets:
+  binary = Extension.Library(builder, cxx, 'rip.ext')
+  arch = binary.compiler.target.arch
+
+  binary.sources += [
+    'src/extension.cpp',
+    'src/httprequest.cpp',
+    'src/httprequestcontext.cpp',
+    'src/httpfilecontext.cpp',
+    'src/httpformcontext.cpp',
+    'src/http_natives.cpp',
+    'src/json_natives.cpp',
+    'src/websocket_eventloop.cpp',
+    'src/websocket_connection.cpp',
+    'src/websocket_connection_base.cpp',
+    'src/websocket_connection_ssl.cpp',
+    'src/websocket_native.cpp',
+    'src/url.cpp',
+    'src/crypto_native.cpp',
+    os.path.join(Extension.sm_root, 'public', 'smsdk_ext.cpp'),
+  ]
+
+  binary.compiler.includes += [
+    os.path.join(builder.sourcePath, 'curl', 'include'),
+    os.path.join(builder.sourcePath, 'jansson', 'include'),
+    os.path.join(builder.sourcePath, 'libuv', 'include'),
+    os.path.join(builder.sourcePath, 'src'),
+    os.path.join(builder.sourcePath, 'boost'),
+    os.path.join(builder.sourcePath, 'openssl', 'include'),
+  ]
+
+  if binary.compiler.target.platform == 'linux':
+    binary.compiler.includes += []
+  elif binary.compiler.target.platform == 'windows':
+    binary.compiler.includes += [
+    ]
+
+  binary.compiler.defines += [
+    'CURL_STATICLIB',
+  ]
+
+  if binary.compiler.family == 'gcc' or binary.compiler.family == 'clang':
+    binary.compiler.cxxflags += ['-fno-rtti']
+  elif binary.compiler.family == 'msvc':
+    binary.compiler.cxxflags += ['/GR-', '/bigobj']
+
+  binary.compiler.postlink += [
+    libcurl[arch].binary,
+    libjansson[arch].binary,
+    libnghttp2[arch].binary,
+    libuv[arch].binary,
+    libz[arch].binary,
+  ]
+
+  if binary.compiler.target.platform == 'linux':
+    binary.compiler.postlink += [
+      '-lrt',
+      '-ldl',
+      '-lpthread',
+    ]
+    if arch == 'x86':
+      binary.compiler.postlink += [
+        os.path.join(builder.sourcePath, 'openssl', 'lib', 'x86', 'libssl.a'),
+        os.path.join(builder.sourcePath, 'openssl', 'lib', 'x86', 'libcrypto.a'),
+      ]
+    else:
+      binary.compiler.postlink += [
+        os.path.join(builder.sourcePath, 'openssl', 'lib', 'x64', 'libssl.a'),
+        os.path.join(builder.sourcePath, 'openssl', 'lib', 'x64', 'libcrypto.a'),
+      ]
+
+  elif binary.compiler.target.platform == 'windows':
+    binary.compiler.postlink += [
+      'psapi.lib',
+      'user32.lib',
+      'advapi32.lib',
+      'iphlpapi.lib',
+      'userenv.lib',
+      'ws2_32.lib',
+      'crypt32.lib',
+    ]
+    if arch == 'x86':
+      binary.compiler.postlink += [
+        os.path.join(builder.sourcePath, 'openssl', 'lib', 'x86', 'libssl32MT.lib'),
+        os.path.join(builder.sourcePath, 'openssl', 'lib', 'x86', 'libcrypto32MT.lib'),
+      ]
+    else:
+      binary.compiler.postlink += [
+        os.path.join(builder.sourcePath, 'openssl', 'lib', 'x64', 'libssl64MT.lib'),
+        os.path.join(builder.sourcePath, 'openssl', 'lib', 'x64', 'libcrypto64MT.lib'),
+      ]
+
+  Extension.extensions += [builder.Add(binary)]
